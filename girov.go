@@ -1,13 +1,12 @@
 package girov
 
 import (
-	"fmt"
 	"net/http"
 )
 
 // HandlerFunc defines the request handler used by gee
 // 类型HandlerFunc，这是提供给框架用户的，用来定义路由映射的处理方法
-type HandlerFunc func(http.ResponseWriter, *http.Request)
+type HandlerFunc func(*Context)
 
 // Engine is the uni handler for all requests
 // Engine implement the interface of ServeHTTP
@@ -18,18 +17,18 @@ type Engine struct {
 	// 路由映射表router
 	// key由请求方法和静态路由地址构成，例如GET-/、GET-/hello、POST-/hello
 	// 这样针对相同的路由，如果请求方法不同,可以映射不同的处理方法(Handler)，value 是用户映射的处理方法
-	router map[string]HandlerFunc
+	//router map[string]HandlerFunc
+	router *router
 }
 
 // New is the constructor of gee.Engine
 func New() *Engine {
-	return &Engine{router: make(map[string]HandlerFunc)}
+	return &Engine{router: newRouter()}
 }
 
 // addRoute 增加路由
 func (engine *Engine) addRoute(method string, pattern string, handler HandlerFunc) {
-	key := method + "-" + pattern
-	engine.router[key] = handler
+	engine.router.addRoute(method, pattern, handler)
 }
 
 // GET defines the method to add GET request
@@ -49,10 +48,6 @@ func (engine *Engine) Run(addr string) (err error) {
 
 // 解析请求的路径，查找路由映射表，如果查到，就执行注册的处理方法。如果查不到，就返回 404 NOT FOUND
 func (engine *Engine) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
-	key := req.Method + "-" + req.URL.Path
-	if handler, ok := engine.router[key]; ok {
-		handler(writer, req)
-	} else {
-		fmt.Fprintf(writer, "404 NOT FOUND: %s\n", req.URL)
-	}
+	c := newContext(writer, req)
+	engine.router.handle(c)
 }
