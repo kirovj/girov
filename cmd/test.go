@@ -7,21 +7,22 @@ import (
 
 func main() {
 	r := girov.New()
-
 	r.GET("/", func(c *girov.Context) {
-		c.HTML(http.StatusOK, "<h1>hello</h1>")
+		c.HTML(http.StatusOK, "<h1>Hello Gee</h1>")
 	})
 
 	r.GET("/hello", func(c *girov.Context) {
-		// expect /hello?name=jack
-		c.String(http.StatusOK, "hello %s, you are at %s\n", c.Query("name"), c.Path)
+		// expect /hello?name=geektutu
+		c.String(http.StatusOK, "hello %s, you're at %s\n", c.Query("name"), c.Path)
 	})
 
-	r.POST("/login", func(c *girov.Context) {
-		c.JSON(http.StatusOK, girov.H{
-			"username": c.PostForm("username"),
-			"password": c.PostForm("password"),
-		})
+	r.GET("/hello/:name", func(c *girov.Context) {
+		// expect /hello/geektutu
+		c.String(http.StatusOK, "hello %s, you're at %s\n", c.Param("name"), c.Path)
+	})
+
+	r.GET("/assets/*filepath", func(c *girov.Context) {
+		c.JSON(http.StatusOK, girov.H{"filepath": c.Param("filepath")})
 	})
 
 	r.Run(":9999")
