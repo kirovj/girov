@@ -1,8 +1,10 @@
 package girov
 
 import (
+	"html/template"
 	"log"
 	"net/http"
+	"path"
 	"strings"
 )
 
@@ -22,7 +24,9 @@ type Engine struct {
 	router *router
 	// 将 Engine 作为最顶层的分组，也就是说 Engine 拥有 RouterGroup 所有的能力
 	*RouterGroup
-	groups []*RouterGroup // store all groups
+	groups        []*RouterGroup     // store all groups
+	htmlTemplates *template.Template // for html render
+	funcMap       template.FuncMap
 }
 
 // RouterGroup 分组控制(Group Control)是 Web 框架应提供的基础功能之一。
@@ -84,6 +88,39 @@ func (group *RouterGroup) Use(middlewares ...HandlerFunc) {
 	group.middlewares = append(group.middlewares, middlewares...)
 }
 
+// 给RouterGroup添加了2个方法，Static 这个方法是暴露给用户的。用户可以将磁盘上的某个文件夹root映射到路由relativePath
+// create static handler
+func (group *RouterGroup) createStaticHandler(relativePath string, fs http.FileSystem) HandlerFunc {
+	absPath := path.Join(group.prefix, relativePath)
+	fileServer := http.StripPrefix(absPath, http.FileServer(fs))
+	return func(c *Context) {
+		file := c.Param("filepath")
+		// Check if file exists and/or if we have permission to access it
+		if _, err := fs.Open(file); err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		fileServer.ServeHTTP(c.Writer, c.Req)
+	}
+}
+
+// Static serve static files
+// r.Static("/assets", "/usr/blog/static") || r.Static("/assets", "./static")
+func (group *RouterGroup) Static(relativePath string, root string) {
+	handler := group.createStaticHandler(relativePath, http.Dir(root))
+	urlPattern := path.Join(relativePath, "/*filepath")
+	// Register GET handlers
+	group.GET(urlPattern, handler)
+}
+
+func (engine *Engine) SetFuncMap(funcMap template.FuncMap) {
+	engine.funcMap = funcMap
+}
+
+func (engine *Engine) LoadHtmlGlob(pattern string) {
+	engine.htmlTemplates = template.Must(template.New("").Funcs(engine.funcMap).ParseGlob(pattern))
+}
+
 // 解析请求的路径，查找路由映射表，如果查到，就执行注册的处理方法。如果查不到，就返回 404 NOT FOUND
 func (engine *Engine) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
 	var middlewares []HandlerFunc
@@ -93,6 +130,7 @@ func (engine *Engine) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
 		}
 	}
 	c := newContext(writer, req)
+	c.engine = engine
 	c.handlers = middlewares
 	engine.router.handle(c)
 }
